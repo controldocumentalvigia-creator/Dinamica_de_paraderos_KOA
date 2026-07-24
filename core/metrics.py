@@ -138,3 +138,92 @@ def return_margin(df):
                         margin += 1440
                     rows.append({"fecha": date, "tramo": f"{first}->{second}", "margen_min": margin})
     return pd.DataFrame(rows)
+
+
+def weekly_punctuality_by_route(df, month=None):
+    """
+    Puntualidad semanal por recorrido.
+    Puntualidad oficial: salida entre 0 y 5 minutos después de la hora programada.
+    Denominador: registros con hora programada e inicio real válidos.
+    """
+    source = df[df["mes"] == month].copy() if month else df.copy()
+    valid = source.dropna(subset=["desv_min"]).copy()
+    if valid.empty:
+        return pd.DataFrame(columns=[
+            "mes", "numero_semana", "semana", "recorrido",
+            "registros_validos", "puntual_0_5", "puntual_pm5",
+            "anticipadas", "retrasos_mayor_5"
+        ])
+
+    return (
+        valid.groupby(
+            ["mes", "numero_semana_mes", "semana_mes", "recorrido"],
+            dropna=False
+        )
+        .agg(
+            registros_validos=("desv_min", "size"),
+            puntual_0_5=("puntual_0_5", "mean"),
+            puntual_pm5=("puntual_pm5", "mean"),
+            anticipadas=("anticipada", "mean"),
+            retrasos_mayor_5=("retraso_mayor_5", "mean"),
+        )
+        .reset_index()
+        .rename(columns={
+            "numero_semana_mes": "numero_semana",
+            "semana_mes": "semana",
+        })
+        .sort_values(["mes", "numero_semana", "recorrido"])
+    )
+
+
+def weekly_route_usage(df, month=None):
+    """
+    Uso semanal de rutas de la jornada tarde.
+
+    Incluye dos lecturas:
+    1. Utilización operativa: recorridos efectivos / salidas programadas de esa ruta.
+    2. Participación de demanda: usuarios de la ruta / usuarios totales de la semana.
+    """
+    source = df[df["mes"] == month].copy() if month else df.copy()
+    afternoon = source[source["jornada"] == "TARDE"].copy()
+    if afternoon.empty:
+        return pd.DataFrame(columns=[
+            "mes", "numero_semana", "semana", "recorrido",
+            "salidas_programadas", "recorridos_efectivos",
+            "utilizacion_operativa", "usuarios",
+            "participacion_usuarios", "promedio_usuarios_salida"
+        ])
+
+    grouped = (
+        afternoon.groupby(
+            ["mes", "numero_semana_mes", "semana_mes", "recorrido"],
+            dropna=False
+        )
+        .agg(
+            salidas_programadas=("recorrido", "size"),
+            recorridos_efectivos=("estado_operativo", lambda x: (x == "EFECTIVO").sum()),
+            usuarios=("usuarios", "sum"),
+            promedio_usuarios_salida=("usuarios", "mean"),
+        )
+        .reset_index()
+        .rename(columns={
+            "numero_semana_mes": "numero_semana",
+            "semana_mes": "semana",
+        })
+    )
+
+    grouped["utilizacion_operativa"] = (
+        grouped["recorridos_efectivos"] / grouped["salidas_programadas"]
+    )
+
+    weekly_users = (
+        grouped.groupby(["mes", "numero_semana"], dropna=False)["usuarios"]
+        .transform("sum")
+    )
+    grouped["participacion_usuarios"] = np.where(
+        weekly_users > 0,
+        grouped["usuarios"] / weekly_users,
+        np.nan,
+    )
+
+    return grouped.sort_values(["mes", "numero_semana", "recorrido"])
