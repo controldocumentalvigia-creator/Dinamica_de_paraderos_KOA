@@ -3,7 +3,10 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from core.metrics import kpis, monthly_summary, weekly_summary, stop_frequency, combinations
+from core.metrics import (
+    kpis, monthly_summary, weekly_summary, stop_frequency, combinations,
+    weekly_punctuality_by_route, weekly_route_usage,
+)
 from ai.conclusions import generate_conclusions
 from ai.recommendations import generate_recommendations
 
@@ -51,16 +54,22 @@ def build_word(df) -> bytes:
     doc.add_heading("4. Análisis semanal", level=1)
     _add_table(doc, weekly_summary(df), max_rows=30)
 
-    doc.add_heading("5. Frecuencia de paraderos", level=1)
+    doc.add_heading("5. Puntualidad semanal por recorrido", level=1)
+    _add_table(doc, weekly_punctuality_by_route(df), max_rows=40)
+
+    doc.add_heading("6. Uso semanal de las rutas", level=1)
+    _add_table(doc, weekly_route_usage(df), max_rows=40)
+
+    doc.add_heading("7. Frecuencia de paraderos", level=1)
     _add_table(doc, stop_frequency(df))
 
-    doc.add_heading("6. Combinaciones y tiempos", level=1)
+    doc.add_heading("8. Combinaciones y tiempos", level=1)
     _add_table(doc, combinations(df), max_rows=25)
 
-    doc.add_heading("7. Plan de acción", level=1)
+    doc.add_heading("9. Plan de acción", level=1)
     _add_table(doc, __import__("pandas").DataFrame(generate_recommendations(df)))
 
-    doc.add_heading("8. Nota metodológica", level=1)
+    doc.add_heading("10. Nota metodológica", level=1)
     doc.add_paragraph(
         "La puntualidad oficial corresponde a salidas entre 0 y 5 minutos después de la hora programada. "
         "Los tiempos efectivos excluyen registros sin usuarios, sin paradas válidas, pendientes de validar y no ejecutados. "
